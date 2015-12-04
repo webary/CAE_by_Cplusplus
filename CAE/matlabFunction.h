@@ -32,7 +32,7 @@ namespace mat {
 					swap(vec[i][j], vec[i][size[1] - j - 1]);
 		}
 	}
-
+	//返回四维数组vec按照dim维翻转后的数组
 	vectorF4D flip(const vectorF4D  &vec, unsigned dim)
 	{
 		if (dim != 1 && dim != 2)
@@ -206,22 +206,48 @@ namespace mat {
 	}
 
 	//求取一个4维数组中的最大值并保存到2维数组中返回
-	inline vectorF2D max(const vectorF4D &vec) {
-		vectorF2D maxMat = vec[0][0];
-		vector<int> v_size = mat::size(vec);
-		for (unsigned i = 1; i < v_size[0]; ++i)
+	inline vectorF4D max4D(const vectorF4D &vec) {
+		const vector<int> v_size = mat::size(vec);
+		vectorF4D maxMat = zeros(1,1,v_size[2],v_size[3]);
+		maxMat[0][0] = vec[0][0];
+		for (unsigned i = 0; i < v_size[0]; ++i)
 			for (unsigned j = 0; j < v_size[1]; ++j)
 				for (unsigned m = 0; m < v_size[2]; ++m)
 					for (unsigned n = 0; n < v_size[3]; ++n)
-						if (maxMat[m][n] < vec[i][j][m][n])
-							maxMat[m][n] = vec[i][j][m][n];
+						if (maxMat[0][0][m][n] < vec[i][j][m][n])
+							maxMat[0][0][m][n] = vec[i][j][m][n];
 		return maxMat;
 
 	}
 
-	//将一个矩阵重叠复制
-	inline vectorF2D repmat(const vectorF2D &vec, int m, int n) {
+	//将一个4维矩阵重叠复制：[1 1 j k] => [m n j k]
+	inline vectorF4D repmat4D(const vectorF4D &vec, int m, int n) {
+		const vector<int> v_size = mat::size(vec);
+		vectorF4D repMat = zeros(m, n, v_size[2], v_size[3]);
+		for (unsigned i = 0; i < v_size[0]; ++i)
+			for (unsigned j = 0; j < v_size[1]; ++j)
+				repMat[i][j] = vec[0][0];
+		return repMat;
+	}
 
+	template<typename T>
+	inline bool equal(T a, T b) {
+		return a-b<1e-5 && b-a<1e-5;
+	}
+	
+	//把haveMax矩阵中不是maxMax(最大值)的元素置0,即只保留其中的最大值
+	inline vectorF4D reserveMax(vectorF4D &haveMax, const vectorF4D &maxMat) {
+		vectorF4D mask(mat::zeros<vectorF4D>(mat::size(haveMax))); //最大值的位置用1表示
+		const vector<int> v_size = mat::size(haveMax);
+		for (unsigned i = 0; i < v_size[0]; ++i)
+			for (unsigned j = 0; j < v_size[1]; ++j)
+				for (unsigned m = 0; m < v_size[2]; ++m)
+					for (unsigned n = 0; n < v_size[3]; ++n)
+						if (equal(haveMax[i][j][m][n], maxMat[0][0][m][n]))
+							mask[i][j][m][n] = 1;  //相等则置该位置的mask为1
+						else
+							haveMax[i][j][m][n] = 0; //不相等则把原始数据中该位置置0
+		return mask;
 	}
 
 }

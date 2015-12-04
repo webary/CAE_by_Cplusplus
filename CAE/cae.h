@@ -47,7 +47,7 @@ struct CAE
 	int ks; //kernel size
 	int ps; //pool size
 	double noise;
-	vectorF b, c, L;
+	vectorF b, c, L, db, dc;
 	vectorF4D w, w_tilde, h, dh, h_pool, h_mask, ph, out;
 	vector<vectorF4D> dw;
 
@@ -130,22 +130,32 @@ struct CAE
 			}
 	}
 
-	void pool(PARA &para) {
+	void pool(const PARA &para) {
 		if (ps >= 2) {
 			h_pool = mat::zeros<vectorF4D>(mat::size(h));
 			h_mask = mat::zeros<vectorF4D>(mat::size(h));
 			ph = mat::zeros(para.pgrds, para.pgrds, oc, para.bsze);
-			vectorF4D grid, sparse_grid, mx, mask;
+			vectorF4D grid = mat::zeros(para.bsze, oc, ps, ps);
+			vectorF4D sparse_grid, mx, mask, tmpMax;
 			for (int i = 0; i < para.pgrds; ++i) {
 				for (int j = 0; j < para.pgrds; ++j){
-					grid = h((i - 1)*ps + 1:i*ps, (j - 1)*ps + 1 : j*ps, : , : );
-					mx = mat::repmat(mat::max(grid), ps, ps); //用最大值填充
-					mask = (grid == mx); //取得最大值所在位置为1，其他为0
-					sparse_grid = mat::zeros<vectorF4D>(mat::size(grid));
-					sparse_grid(mask) = grid(mask); //只保留最大的值，其他为0
-					h_pool((i - 1)*ps + 1:i*ps, (j - 1)*ps + 1 : j*ps, : , : ) = sparse_grid;
-					h_mask((i - 1)*ps + 1:i*ps, (j - 1)*ps + 1 : j*ps, : , : ) = mask;
-					ph(i, j, :, : ) = mat::max(mat::max(grid));
+					for (int pt = 0; pt < para.bsze; ++pt)
+						for (int _oc = 0; _oc < oc; ++_oc)
+							for (int jj = 0; jj < ps; ++jj)
+								for (int ii = 0; ii < ps; ++ii)
+									grid[pt][_oc][jj][ii] = h[pt][_oc][j*ps + jj][i*ps + ii];
+					tmpMax = mat::max4D(grid);
+					ph[i][j] = tmpMax[0][0];
+					mx = mat::repmat4D(tmpMax, ps, ps); //用最大值填充
+					sparse_grid = grid;
+					mask = mat::reserveMax(sparse_grid, tmpMax);
+					for (int pt = 0; pt < para.bsze; ++pt)
+						for (int _oc = 0; _oc < oc; ++_oc)
+							for (int jj = 0; jj < ps; ++jj)
+								for (int ii = 0; ii < ps; ++ii){
+									h_pool[pt][_oc][j*ps + jj][i*ps + ii] = sparse_grid[pt][_oc][jj][ii];
+									h_mask[pt][_oc][j*ps + jj][i*ps + ii] = mask[pt][_oc][jj][ii];
+								}
 				}
 			}
 		}
@@ -168,11 +178,60 @@ struct CAE
 	}
 
 	void grad(const vectorF4D &x, PARA &para) {
+		//% o = sigmoid(y'), y' = sigma(maxpool(sigmoid(h'))*W~)+c, h' = W*x+b
+		//% y', h' are pre-activation terms
+		cae.err = (cae.o-x);
+		cae.loss = 1/2 * sum(cae.err(:) .^2 )/para.bsze;
+		//% size(cae.loss)
 
+		//% dloss/dy' = (y-x)(y(1-y))
+		cae.dy = cae.err.*(cae.o.*(1-cae.o))/para.bsze;
+		//% dloss/dc = sigma(dy')
+		
+		cae.dc = reshape(sum(sum(cae.dy)),[size(cae.c) para.bsze]);
+		//% dloss/dmaxpool(sigmoid(h')) = sigma(dy'*W)
+		cae.dh = zeros(size(cae.h));
+		for pt = 1:para.bsze
+			for oc = 1:cae.oc
+				for ic = 1:cae.ic
+					cae.dh(:,:,oc,pt) = cae.dh(:,:,oc,pt)+conv2(cae.dy(:,:,ic,pt),cae.w(:,:,ic,oc),'valid');
+				end                   
+			end        
+		end    
+		if cae.ps>=2        
+			cae.dh = cae.dh.*cae.h_mask;
+		end
+		//% dsigmoid(h')/dh'
+		cae.dh = cae.dh.*(cae.h.*(1-cae.h)); 
+		//% dloss/db = sigma(dh')
+		if para.pgrds>=2
+		 cae.db = reshape(sum(sum(cae.dh)),[size(cae.b) para.bsze]);
+		else
+		 cae.db = reshape(cae.dh,[size(cae.b) para.bsze]);
+		end
+		//% dloss/dw = x~*dh'+dy'~*h
+		cae.dw = zeros([size(cae.w) para.bsze]);
+		cae.dy_tilde = flip(flip(cae.dy,1),2);
+		x_tilde = flip(flip(x,1),2);
+		for pt = 1:para.bsze
+			for oc = 1:cae.oc
+				for ic = 1:cae.ic                
+					//% x~*dh+dy~*h, perfect                
+					cae.dw(:,:,ic,oc,pt) = conv2(x_tilde(:,:,ic,pt),cae.dh(:,:,oc,pt),'valid')+conv2(cae.dy_tilde(:,:,ic,pt),cae.h_pool(:,:,oc,pt),'valid');
+				end
+			end        
+		end    
+		
+		cae.dc = sum(cae.dc,3);
+		cae.db = sum(cae.db,3);
+		cae.dw = sum(cae.dw,5);
 	}
 
 	void update(const OPTS &opts) {
-
+		b -= opts.alpha * db;  //请先确保db已初始化
+		c -= opts.alpha * dc;
+		w -= opts.alpha * dw;
+		w_tilde = flip(flip(w,1),2);
 	}
 
 	PARA check(const vectorF4D &x, const OPTS &opts) {
