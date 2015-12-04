@@ -5,8 +5,7 @@
 #include "matlabFunction.h"
 
 //int batchsize;	bool shuffle;	double alpha;	int numepochs;
-struct OPTS
-{
+struct OPTS {
 	int batchsize;
 	bool shuffle;
 	double alpha;
@@ -22,17 +21,15 @@ struct OPTS
 	}
 };
 
-struct PARA
-{
+struct PARA {
 	int m;      //size(x,4)
 	int pnum;   //number of data points
 	float pgrds;//pool grids
-	int bsze;   //batch size	
+	int bsze;   //batch size
 	float bnum; //number of batches
 };
 
-struct InputSet
-{
+struct InputSet {
 	//[1000  1  28  28]  注意matlab里是[28 28 1 1000]
 	vectorF4D data; //输入图数据
 	int tag;	//输入图标签
@@ -40,8 +37,7 @@ struct InputSet
 	InputSet(vectorF4D &_data, int _tag) : data(_data), tag(_tag) {}
 };
 
-struct CAE
-{
+struct CAE {
 	int ic; //input channels
 	int oc; //ouput channels
 	int ks; //kernel size
@@ -54,8 +50,7 @@ struct CAE
 	CAE() = default;
 	CAE(int _ic, int _oc, int _ks, int _ps, double _noise)
 		: b(mat::zeros(_oc)), c(mat::zeros(_ic)),
-		w(_oc, vector<vectorF2D>(_ic, vectorF2D(_ks, vectorF(_ks))))
-	{
+		  w(_oc, vector<vectorF2D>(_ic, vectorF2D(_ks, vectorF(_ks)))) {
 		ic = _ic;
 		oc = _oc;
 		ks = _ks;
@@ -81,7 +76,7 @@ struct CAE
 		int t_start;
 		vector<int> idx;
 		vectorF4D batch_x = mat::zeros(para.bsze, mat::size(x, 2)
-			, mat::size(x, 3), mat::size(x, 4));
+		                               , mat::size(x, 3), mat::size(x, 4));
 		for (int i = 0; i < opts.numepochs; ++i) {
 			cout << "epoch " << i << "/" << opts.numepochs << endl;
 			t_start = clock(); //开始计时
@@ -138,7 +133,7 @@ struct CAE
 			vectorF4D grid = mat::zeros(para.bsze, oc, ps, ps);
 			vectorF4D sparse_grid, mx, mask, tmpMax;
 			for (int i = 0; i < para.pgrds; ++i) {
-				for (int j = 0; j < para.pgrds; ++j){
+				for (int j = 0; j < para.pgrds; ++j) {
 					for (int pt = 0; pt < para.bsze; ++pt)
 						for (int _oc = 0; _oc < oc; ++_oc)
 							for (int jj = 0; jj < ps; ++jj)
@@ -152,14 +147,13 @@ struct CAE
 					for (int pt = 0; pt < para.bsze; ++pt)
 						for (int _oc = 0; _oc < oc; ++_oc)
 							for (int jj = 0; jj < ps; ++jj)
-								for (int ii = 0; ii < ps; ++ii){
+								for (int ii = 0; ii < ps; ++ii) {
 									h_pool[pt][_oc][j*ps + jj][i*ps + ii] = sparse_grid[pt][_oc][jj][ii];
 									h_mask[pt][_oc][j*ps + jj][i*ps + ii] = mask[pt][_oc][jj][ii];
 								}
 				}
 			}
-		}
-		else {
+		} else {
 			ph = h;
 			h_pool = h;
 			h_mask = h;
@@ -181,47 +175,53 @@ struct CAE
 		//% o = sigmoid(y'), y' = sigma(maxpool(sigmoid(h'))*W~)+c, h' = W*x+b
 		//% y', h' are pre-activation terms
 		cae.err = (cae.o-x);
-		cae.loss = 1/2 * sum(cae.err(:) .^2 )/para.bsze;
+cae.loss = 1/2 * sum(cae.err(:) .^2 )/para.bsze;
 		//% size(cae.loss)
 
 		//% dloss/dy' = (y-x)(y(1-y))
 		cae.dy = cae.err.*(cae.o.*(1-cae.o))/para.bsze;
 		//% dloss/dc = sigma(dy')
-		
+
 		cae.dc = reshape(sum(sum(cae.dy)),[size(cae.c) para.bsze]);
 		//% dloss/dmaxpool(sigmoid(h')) = sigma(dy'*W)
 		cae.dh = zeros(size(cae.h));
-		for pt = 1:para.bsze
-			for oc = 1:cae.oc
-				for ic = 1:cae.ic
-					cae.dh(:,:,oc,pt) = cae.dh(:,:,oc,pt)+conv2(cae.dy(:,:,ic,pt),cae.w(:,:,ic,oc),'valid');
-				end                   
-			end        
-		end    
-		if cae.ps>=2        
-			cae.dh = cae.dh.*cae.h_mask;
+for pt = 1:
+		         para.bsze
+         for oc = 1:
+			                  cae.oc
+                  for ic = 1:
+				                           cae.ic
+                           cae.dh(:,:,oc,pt) = cae.dh(:,:,oc,pt)+conv2(cae.dy(:,:,ic,pt),cae.w(:,:,ic,oc),'valid');
 		end
-		//% dsigmoid(h')/dh'
-		cae.dh = cae.dh.*(cae.h.*(1-cae.h)); 
+		end
+		end
+		if cae.ps>=2
+		cae.dh = cae.dh.*cae.h_mask;
+	end
+	//% dsigmoid(h')/dh'
+	cae.dh = cae.dh.*(cae.h.*(1-cae.h));
 		//% dloss/db = sigma(dh')
 		if para.pgrds>=2
-		 cae.db = reshape(sum(sum(cae.dh)),[size(cae.b) para.bsze]);
+		cae.db = reshape(sum(sum(cae.dh)),[size(cae.b) para.bsze]);
 		else
-		 cae.db = reshape(cae.dh,[size(cae.b) para.bsze]);
+			cae.db = reshape(cae.dh,[size(cae.b) para.bsze]);
 		end
 		//% dloss/dw = x~*dh'+dy'~*h
 		cae.dw = zeros([size(cae.w) para.bsze]);
 		cae.dy_tilde = flip(flip(cae.dy,1),2);
 		x_tilde = flip(flip(x,1),2);
-		for pt = 1:para.bsze
-			for oc = 1:cae.oc
-				for ic = 1:cae.ic                
-					//% x~*dh+dy~*h, perfect                
-					cae.dw(:,:,ic,oc,pt) = conv2(x_tilde(:,:,ic,pt),cae.dh(:,:,oc,pt),'valid')+conv2(cae.dy_tilde(:,:,ic,pt),cae.h_pool(:,:,oc,pt),'valid');
-				end
-			end        
-		end    
-		
+for pt = 1:
+		         para.bsze
+         for oc = 1:
+			                  cae.oc
+                  for ic = 1:
+				                           cae.ic
+				                           //% x~*dh+dy~*h, perfect
+                           cae.dw(:,:,ic,oc,pt) = conv2(x_tilde(:,:,ic,pt),cae.dh(:,:,oc,pt),'valid')+conv2(cae.dy_tilde(:,:,ic,pt),cae.h_pool(:,:,oc,pt),'valid');
+		end
+		end
+		end
+
 		cae.dc = sum(cae.dc,3);
 		cae.db = sum(cae.db,3);
 		cae.dw = sum(cae.dw,5);
@@ -253,17 +253,14 @@ struct CAE
 	}
 
 
-	static double randDouble()
-	{
+	static double randDouble() {
 		return rand() / (double)RAND_MAX;
 	}
-	static double randDouble(double a, double b)
-	{
+	static double randDouble(double a, double b) {
 		return (b - a)*randDouble() + a;
 	}
 	//把out与vec1相加保存到out
-	static void addVector(vectorF2D& output, const vectorF2D& vec1)
-	{
+	static void addVector(vectorF2D& output, const vectorF2D& vec1) {
 		uint i, j, sizeOut[2] = { output.size() ,output[0].size() };
 		uint sizeVec[2] = { vec1.size() ,vec1[0].size() };
 		for (i = 0; i < sizeOut[0] && i < sizeVec[0]; ++i)
