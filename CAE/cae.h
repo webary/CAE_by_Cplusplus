@@ -42,15 +42,15 @@ struct CAE {
 	int oc; //ouput channels
 	int ks; //kernel size
 	int ps; //pool size
-	double noise;
+	double noise, loss;
 	vectorF b, c, L, db, dc;
-	vectorF4D w, w_tilde, h, dh, h_pool, h_mask, ph, out;
-	vector<vectorF4D> dw;
+	vectorF4D w, h, h_pool, h_mask, ph, out, err;
+	vectorF4D dw, w_tilde, dh, dy, dy_tilde;
 
 	CAE() = default;
 	CAE(int _ic, int _oc, int _ks, int _ps, double _noise)
 		: b(mat::zeros(_oc)), c(mat::zeros(_ic)),
-		  w(_oc, vector<vectorF2D>(_ic, vectorF2D(_ks, vectorF(_ks)))) {
+		  w(_oc, vectorF3D(_ic, vectorF2D(_ks, vectorF(_ks)))) {
 		ic = _ic;
 		oc = _oc;
 		ks = _ks;
@@ -74,11 +74,11 @@ struct CAE {
 		PARA para = check(x, opts);
 		L = mat::zeros(opts.numepochs * (int)para.bnum);
 		int t_start;
-		vector<int> idx;
+		std::vector<int> idx;
 		vectorF4D batch_x = mat::zeros(para.bsze, mat::size(x, 2)
 		                               , mat::size(x, 3), mat::size(x, 4));
 		for (int i = 0; i < opts.numepochs; ++i) {
-			cout << "epoch " << i << "/" << opts.numepochs << endl;
+			std::cout << "epoch " << i << "/" << opts.numepochs << std::endl;
 			t_start = clock(); //开始计时
 			if (opts.shuffle)
 				idx = mat::randperm(para.pnum);
@@ -89,10 +89,10 @@ struct CAE {
 					batch_x[k] = x[j * para.bsze + k];
 				ffbp(batch_x, para);
 				update(opts);
-				L[i*(int)para.bnum + j] = 0;// loss;
+				L[i*(int)para.bnum + j] = loss;
 			}
 			//显示平均值
-			cout << mat::mean(L) << endl << clock() - t_start << endl;
+			std::cout << mat::mean(L) << std::endl << clock() - t_start << std::endl;
 			t_start = clock();
 		}
 	}
@@ -131,7 +131,7 @@ struct CAE {
 			h_mask = mat::zeros<vectorF4D>(mat::size(h));
 			ph = mat::zeros(para.pgrds, para.pgrds, oc, para.bsze);
 			vectorF4D grid = mat::zeros(para.bsze, oc, ps, ps);
-			vectorF4D sparse_grid, mx, mask, tmpMax;
+			vectorF4D sparse_grid, mask, tmpMax;
 			for (int i = 0; i < para.pgrds; ++i) {
 				for (int j = 0; j < para.pgrds; ++j) {
 					for (int pt = 0; pt < para.bsze; ++pt)
@@ -141,7 +141,6 @@ struct CAE {
 									grid[pt][_oc][jj][ii] = h[pt][_oc][j*ps + jj][i*ps + ii];
 					tmpMax = mat::max4D(grid);
 					ph[i][j] = tmpMax[0][0];
-					mx = mat::repmat4D(tmpMax, ps, ps); //用最大值填充
 					sparse_grid = grid;
 					mask = mat::reserveMax(sparse_grid, tmpMax);
 					for (int pt = 0; pt < para.bsze; ++pt)
@@ -172,66 +171,77 @@ struct CAE {
 	}
 
 	void grad(const vectorF4D &x, PARA &para) {
-		//% o = sigmoid(y'), y' = sigma(maxpool(sigmoid(h'))*W~)+c, h' = W*x+b
-		//% y', h' are pre-activation terms
-		cae.err = (cae.o-x);
-cae.loss = 1/2 * sum(cae.err(:) .^2 )/para.bsze;
-		//% size(cae.loss)
-
-		//% dloss/dy' = (y-x)(y(1-y))
-		cae.dy = cae.err.*(cae.o.*(1-cae.o))/para.bsze;
-		//% dloss/dc = sigma(dy')
-
-		cae.dc = reshape(sum(sum(cae.dy)),[size(cae.c) para.bsze]);
-		//% dloss/dmaxpool(sigmoid(h')) = sigma(dy'*W)
-		cae.dh = zeros(size(cae.h));
-for pt = 1:
-		         para.bsze
-         for oc = 1:
-			                  cae.oc
-                  for ic = 1:
-				                           cae.ic
-                           cae.dh(:,:,oc,pt) = cae.dh(:,:,oc,pt)+conv2(cae.dy(:,:,ic,pt),cae.w(:,:,ic,oc),'valid');
-		end
-		end
-		end
-		if cae.ps>=2
-		cae.dh = cae.dh.*cae.h_mask;
-	end
-	//% dsigmoid(h')/dh'
-	cae.dh = cae.dh.*(cae.h.*(1-cae.h));
-		//% dloss/db = sigma(dh')
-		if para.pgrds>=2
-		cae.db = reshape(sum(sum(cae.dh)),[size(cae.b) para.bsze]);
+		unsigned i, j, m, n;
+		std::vector<int> sizeOut;
+		if (err.size() == 0 || dy.size() == 0) { //如果还没初始化err或dy，则让其大小等于out
+			dy = err = mat::zeros<vectorF4D>(mat::size(out));
+			sizeOut = mat::size(out);
+		}
+		loss = 0;
+		vectorF tempDc(sizeOut[0] * sizeOut[1], 0);
+		for (i = 0; i < sizeOut[0]; ++i)
+			for (j = 0; j < sizeOut[1]; ++j)
+				for (m = 0; j < sizeOut[2]; ++m)
+					for (n = 0; j < sizeOut[3]; ++n) {
+						err[i][j][m][n] = out[i][j][m][n] - x[i][j][m][n];
+						dy[i][j][m][n] = err[i][j][m][n] * (out[i][j][m][n] * (1 - out[i][j][m][n])) / para.bsze;
+						loss += err[i][j][m][n] * err[i][j][m][n];
+						tempDc[i*sizeOut[1] + j] += dy[i][j][m][n];
+					}
+		loss /= (2 * para.bsze); // 0.5 * sum(err[:] ^2) / bsze
+		dc = mat::zeros(c.size());
+		for (i = m = 0; i < c.size(); ++i)
+			for (j = 0; j < para.bsze; ++j)
+				dc[i] += tempDc[m++];
+		dh = mat::zeros<vectorF4D>(mat::size(h));
+		int _pt, _oc, _ic;
+		for (_pt = 0; _pt < para.bsze; ++_pt)
+			for (_oc = 0; _oc < oc; ++_oc)
+				for (_ic = 0; _ic < ic; ++_ic)
+					addVector(dh[_pt][_oc], conv2(dy[_pt][_ic], w[_oc][_ic], mat::VALID));
+		std::vector<int> sizeDh = mat::size(dh);
+		if (ps >= 2) {
+			for (i = 0; i < sizeDh[0]; ++i)
+				for (j = 0; j < sizeDh[1]; ++j)
+					for (m = 0; j < sizeDh[2]; ++m)
+						for (n = 0; j < sizeDh[3]; ++n)
+							dh[i][j][m][n] *= h_mask[i][j][m][n];
+		}
+		for (i = 0; i < sizeDh[0]; ++i)
+			for (j = 0; j < sizeDh[1]; ++j)
+				for (m = 0; j < sizeDh[2]; ++m)
+					for (n = 0; j < sizeDh[3]; ++n)
+						dh[i][j][m][n] *= h[i][j][m][n] * (1 - h[i][j][m][n]);
+		/*if (para.pgrds>=2)
+			db = reshape(sum(sum(dh)),[size(b) para.bsze]);
 		else
-			cae.db = reshape(cae.dh,[size(cae.b) para.bsze]);
-		end
-		//% dloss/dw = x~*dh'+dy'~*h
-		cae.dw = zeros([size(cae.w) para.bsze]);
-		cae.dy_tilde = flip(flip(cae.dy,1),2);
-		x_tilde = flip(flip(x,1),2);
-for pt = 1:
-		         para.bsze
-         for oc = 1:
-			                  cae.oc
-                  for ic = 1:
-				                           cae.ic
-				                           //% x~*dh+dy~*h, perfect
-                           cae.dw(:,:,ic,oc,pt) = conv2(x_tilde(:,:,ic,pt),cae.dh(:,:,oc,pt),'valid')+conv2(cae.dy_tilde(:,:,ic,pt),cae.h_pool(:,:,oc,pt),'valid');
-		end
-		end
-		end
-
-		cae.dc = sum(cae.dc,3);
-		cae.db = sum(cae.db,3);
-		cae.dw = sum(cae.dw,5);
+			db = reshape(dh,[size(b) para.bsze]);
+		db = sum(db,3);*/
+		dw = mat::zeros<vectorF4D>(mat::size(w));
+		dy_tilde = mat::flip(mat::flip(dy,1),2);
+		vectorF4D x_tilde = mat::flip(mat::flip(x,1),2);
+		for (_pt = 0; _pt < para.bsze; ++_pt)
+			for (_oc = 0; _oc < oc; ++_oc)
+				for (_ic = 0; _ic < ic; ++_ic) {
+					addVector(dw[_pt][_oc]
+						,mat::conv2(x_tilde[_pt][_ic], dh[_pt][_oc], mat::VALID)
+						,mat::conv2(dy_tilde[_pt][_ic],h_pool[_pt][_oc], mat::VALID));
+				}
 	}
 
 	void update(const OPTS &opts) {
-		b -= opts.alpha * db;  //请先确保db已初始化
-		c -= opts.alpha * dc;
-		w -= opts.alpha * dw;
-		w_tilde = flip(flip(w,1),2);
+		unsigned sizeB =  b.size(), sizeC = c.size() ,i, j, m, n;
+		for (i = 0; i < sizeB; ++i)
+			b[i] -= opts.alpha * db[i];
+		for (i = 0; i < sizeC; ++i)
+			c[i] -= opts.alpha * dc[i];
+		std::vector<int> sizeW = mat::size<vectorF4D>(w);
+		for (i = 0; i < sizeW[0]; ++i)
+			for (j = 0; j < sizeW[1]; ++j)
+				for (m = 0; j < sizeW[2]; ++m)
+					for (n = 0; j < sizeW[3]; ++n)
+						w[i][j][m][n] -= opts.alpha * dw[i][j][m][n];
+		w_tilde = mat::flip(mat::flip(w,1),2);
 	}
 
 	PARA check(const vectorF4D &x, const OPTS &opts) {

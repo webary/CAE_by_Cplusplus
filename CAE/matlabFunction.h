@@ -6,16 +6,26 @@
 #include<vector>
 #include<iostream>
 #include<algorithm>
-using namespace std;
 
 typedef unsigned uint;
-typedef vector<float> vectorF;
-typedef vector<vectorF> vectorF2D;
-typedef vector<vector<vectorF2D> > vectorF4D;
+typedef std::vector<float> vectorF;
+typedef std::vector<vectorF> vectorF2D;
+typedef std::vector<vectorF2D> vectorF3D;
+typedef std::vector<vectorF3D> vectorF4D;
 
 //实现matlab中常见操作
 namespace mat
 {
+//显示一个二维数组
+void disp(vectorF2D &vec)
+{
+		unsigned size[2] = { vec.size(), vec[0].size() }, i, j;
+		for (i = 0; i < size[0]; ++i) {
+			for (j = 0; j < size[1]; ++j)
+				std::cout << vec[i][j] << " ";
+			std::cout << std::endl;
+		}
+}
 //对二维数组vec的按dim维进行原地翻转
 void flip(vectorF2D &vec, unsigned dim)
 {
@@ -24,12 +34,12 @@ void flip(vectorF2D &vec, unsigned dim)
 		half = size[0] / 2;
 		for (i = 0; i < half; ++i)
 			for (j = 0; j < size[1]; ++j)
-				swap(vec[i][j], vec[size[0] - i - 1][j]);
+				std::swap(vec[i][j], vec[size[0] - i - 1][j]);
 	} else if (dim == 2) {
 		half = size[1] / 2;
 		for (i = 0; i < size[0]; ++i)
 			for (j = 0; j < half; ++j)
-				swap(vec[i][j], vec[i][size[1] - j - 1]);
+				std::swap(vec[i][j], vec[i][size[1] - j - 1]);
 	}
 }
 //返回四维数组vec按照dim维翻转后的数组
@@ -38,7 +48,7 @@ vectorF4D flip(const vectorF4D  &vec, unsigned dim)
 	if (dim != 1 && dim != 2)
 		return vec;
 	vectorF4D myVec = vec;
-	unsigned size[2] = { myVec.size(), myVec[0].size() }, i, j;
+	int size[2] = { myVec.size(), myVec[0].size() }, i, j;
 	for (i = 0; i < size[0]; ++i)
 		for (j = 0; j < size[1]; ++j)
 			flip(myVec[i][j], dim);
@@ -62,9 +72,9 @@ inline int size(const T &vec, int dim)
 
 //当没有传入维度时返回vec的所有维度信息
 template<typename T>
-inline vector<int> size(const T &vec)
+inline std::vector<int> size(const T &vec)
 {
-	vector<int> sizeMat(vec.size());
+	std::vector<int> sizeMat(vec.size());
 	unsigned i = 0;
 	sizeMat[i++] = vec.size();
 	if (vec.size() > 1)
@@ -78,23 +88,23 @@ inline vector<int> size(const T &vec)
 
 inline void error(const char* str)
 {
-	cout << str << endl;
+	std::cout << str << std::endl;
 	exit(1);
 }
 
-inline vector<int> randperm(unsigned n)
+inline std::vector<int> randperm(unsigned n)
 {
-	vector<int> randp(n);
+	std::vector<int> randp(n);
 	for (unsigned i = 0; i < n; ++i)
 		randp[i] = i;
-	random_shuffle(randp.begin(), randp.end()); //algorithm
+	std::random_shuffle(randp.begin(), randp.end()); //algorithm
 	return randp;
 }
 
 template<typename T>
-inline vector<T> linspace(const T &a, const T &b, unsigned n)
+inline std::vector<T> linspace(const T &a, const T &b, unsigned n)
 {
-	vector<T> randp(n);
+	std::vector<T> randp(n);
 	T step = (b - a) / (n - 1);
 	for (unsigned i = 0; i < n; ++i)
 		randp[i] = a + i * step;
@@ -112,19 +122,19 @@ inline vectorF2D zeros(int a, int b)
 	return vectorF2D(a, vectorF(b, 0));
 }
 
-inline vector<vectorF2D> zeros(int a, int b, int c)
+inline vectorF3D zeros(int a, int b, int c)
 {
-	return vector<vectorF2D>(a, vectorF2D(b, vectorF(c, 0)));
+	return vectorF3D(a, vectorF2D(b, vectorF(c, 0)));
 }
 
 inline vectorF4D zeros(int a, int b, int c, int d)
 {
-	return vectorF4D(a, vector<vectorF2D>(b, vectorF2D(c, vectorF(d, 0))));
+	return vectorF4D(a, vectorF3D(b, vectorF2D(c, vectorF(d, 0))));
 }
 
 //按照vec的规格产生一个零矩阵
 template<typename T>
-inline T zeros(const vector<int> &vec)
+inline T zeros(const std::vector<int> &vec)
 {
 	switch (vec.size()) {
 	case 4:
@@ -198,7 +208,7 @@ float mean(const vectorF &vec)
 }
 
 //求取一个一维数组中的最大值并返回
-inline float max(const vector<float> &vec)
+inline float max(const vectorF &vec)
 {
 	unsigned v_size = vec.size();
 	if (v_size < 1)
@@ -223,10 +233,10 @@ inline vectorF max(const vectorF2D &vec)
 
 }
 
-//求取一个4维数组中的最大值并保存到2维数组中返回
+//求取一个4维数组中的最大值并保存到[1][1][*][*]数组中返回
 inline vectorF4D max4D(const vectorF4D &vec)
 {
-	const vector<int> v_size = mat::size(vec);
+	const std::vector<int> v_size = mat::size(vec);
 	vectorF4D maxMat = zeros(1,1,v_size[2],v_size[3]);
 	maxMat[0][0] = vec[0][0];
 	for (unsigned i = 0; i < v_size[0]; ++i)
@@ -242,7 +252,7 @@ inline vectorF4D max4D(const vectorF4D &vec)
 //将一个4维矩阵重叠复制：[1 1 j k] => [m n j k]
 inline vectorF4D repmat4D(const vectorF4D &vec, int m, int n)
 {
-	const vector<int> v_size = mat::size(vec);
+	const std::vector<int> v_size = mat::size(vec);
 	vectorF4D repMat = zeros(m, n, v_size[2], v_size[3]);
 	for (unsigned i = 0; i < v_size[0]; ++i)
 		for (unsigned j = 0; j < v_size[1]; ++j)
@@ -260,7 +270,7 @@ inline bool equal(T a, T b)
 inline vectorF4D reserveMax(vectorF4D &haveMax, const vectorF4D &maxMat)
 {
 	vectorF4D mask(mat::zeros<vectorF4D>(mat::size(haveMax))); //最大值的位置用1表示
-	const vector<int> v_size = mat::size(haveMax);
+	const std::vector<int> v_size = mat::size(haveMax);
 	for (unsigned i = 0; i < v_size[0]; ++i)
 		for (unsigned j = 0; j < v_size[1]; ++j)
 			for (unsigned m = 0; m < v_size[2]; ++m)
@@ -271,6 +281,7 @@ inline vectorF4D reserveMax(vectorF4D &haveMax, const vectorF4D &maxMat)
 						haveMax[i][j][m][n] = 0; //不相等则把原始数据中该位置置0
 	return mask;
 }
+
 
 }
 #endif //_MATLABFUNCTION_H_
