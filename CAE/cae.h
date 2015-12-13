@@ -8,7 +8,7 @@
 struct OPTS {
 	int batchsize;
 	bool shuffle;
-	double alpha;
+	float alpha;
 	int numepochs;
 
 	OPTS() = default;
@@ -16,7 +16,7 @@ struct OPTS {
 	OPTS(int bs, bool sh, double al, int ne) {
 		batchsize = bs;
 		shuffle = sh;
-		alpha = al;
+		alpha = (float)al;
 		numepochs = ne;
 	}
 };
@@ -62,7 +62,7 @@ struct CAE {
 			for (j = 0; j < ic; ++j)
 				for (m = 0; m < ks; ++m)
 					for (n = 0; n < ks; ++n)
-						w[i][j][m][n] = (float)(randDouble() - .5) * 60 / (oc*ks*ks);
+						w[i][j][m][n] = (randFloat() - .5f) * 60 / (oc*ks*ks);
 		w_tilde = mat::flip(mat::flip(w, 1), 2);
 	}
 
@@ -99,15 +99,13 @@ struct CAE {
 
 	void ffbp(const vectorF4D &x, PARA &para) {
 		vectorF4D x_noise = x;
-		int i, j, m, n;
-		int x_size[4];
-		for (i = 0; i < 4; ++i)
-			x_size[i] = mat::size(x_noise, i + 1);
+		uint i, j, m, n;
+		std::vector<uint> x_size = mat::size(x_noise);
 		for (i = 0; i < x_size[0]; ++i)
 			for (j = 0; j < x_size[1]; ++j)
 				for (m = 0; m < x_size[2]; ++m)
 					for (n = 0; n < x_size[3]; ++n)
-						if (randDouble() < noise)
+						if (randFloat() < noise)
 							x_noise[i][j][m][n] = 0;
 		up(x_noise, para);
 		pool(para);
@@ -127,9 +125,8 @@ struct CAE {
 
 	void pool(const PARA &para) {
 		if (ps >= 2) {
-			h_pool = mat::zeros<vectorF4D>(mat::size(h));
-			h_mask = mat::zeros<vectorF4D>(mat::size(h));
-			ph = mat::zeros(para.pgrds, para.pgrds, oc, para.bsze);
+			h_pool = h_mask = mat::zeros(h);
+			ph = mat::zeros((uint)para.pgrds, (uint)para.pgrds, oc, para.bsze);
 			vectorF4D grid = mat::zeros(para.bsze, oc, ps, ps);
 			vectorF4D sparse_grid, mask, tmpMax;
 			for (int i = 0; i < para.pgrds; ++i) {
@@ -172,57 +169,87 @@ struct CAE {
 
 	void grad(const vectorF4D &x, PARA &para) {
 		unsigned i, j, m, n;
-		std::vector<int> sizeOut;
+		std::vector<unsigned> sizeOut;
 		if (err.size() == 0 || dy.size() == 0) { //如果还没初始化err或dy，则让其大小等于out
-			dy = err = mat::zeros<vectorF4D>(mat::size(out));
+			dy = err = mat::zeros(out);
 			sizeOut = mat::size(out);
 		}
 		loss = 0;
 		vectorF tempDc(sizeOut[0] * sizeOut[1], 0);
 		for (i = 0; i < sizeOut[0]; ++i)
 			for (j = 0; j < sizeOut[1]; ++j)
-				for (m = 0; j < sizeOut[2]; ++m)
-					for (n = 0; j < sizeOut[3]; ++n) {
+				for (m = 0; m < sizeOut[2]; ++m)
+					for (n = 0; n < sizeOut[3]; ++n) {
 						err[i][j][m][n] = out[i][j][m][n] - x[i][j][m][n];
 						dy[i][j][m][n] = err[i][j][m][n] * (out[i][j][m][n] * (1 - out[i][j][m][n])) / para.bsze;
 						loss += err[i][j][m][n] * err[i][j][m][n];
 						tempDc[i*sizeOut[1] + j] += dy[i][j][m][n];
 					}
 		loss /= (2 * para.bsze); // 0.5 * sum(err[:] ^2) / bsze
-		dc = mat::zeros(c.size());
-		for (i = m = 0; i < c.size(); ++i)
-			for (j = 0; j < para.bsze; ++j)
+		if(dc.size()==0)
+			dc = mat::zeros(c.size());
+		for (i = m = 0; i < c.size(); ++i) {
+			dc[i] = 0.0f;
+			for (j = 0; j < (uint)para.bsze; ++j)
 				dc[i] += tempDc[m++];
-		dh = mat::zeros<vectorF4D>(mat::size(h));
+		}
+		//更新dh
+		dh = mat::zeros(h); //[2 6 24 24]
 		int _pt, _oc, _ic;
 		for (_pt = 0; _pt < para.bsze; ++_pt)
 			for (_oc = 0; _oc < oc; ++_oc)
 				for (_ic = 0; _ic < ic; ++_ic)
 					addVector(dh[_pt][_oc], conv2(dy[_pt][_ic], w[_oc][_ic], mat::VALID));
-		std::vector<int> sizeDh = mat::size(dh);
+		std::vector<uint> sizeDh = mat::size(dh);
 		if (ps >= 2) {
 			for (i = 0; i < sizeDh[0]; ++i)
 				for (j = 0; j < sizeDh[1]; ++j)
-					for (m = 0; j < sizeDh[2]; ++m)
-						for (n = 0; j < sizeDh[3]; ++n)
+					for (m = 0; m < sizeDh[2]; ++m)
+						for (n = 0; n < sizeDh[3]; ++n)
 							dh[i][j][m][n] *= h_mask[i][j][m][n];
 		}
 		for (i = 0; i < sizeDh[0]; ++i)
 			for (j = 0; j < sizeDh[1]; ++j)
-				for (m = 0; j < sizeDh[2]; ++m)
-					for (n = 0; j < sizeDh[3]; ++n)
+				for (m = 0; m < sizeDh[2]; ++m)
+					for (n = 0; n < sizeDh[3]; ++n)
 						dh[i][j][m][n] *= h[i][j][m][n] * (1 - h[i][j][m][n]);
-		/*if (para.pgrds>=2)
-			db = reshape(sum(sum(dh)),[size(b) para.bsze]);
-		else
-			db = reshape(dh,[size(b) para.bsze]);
-		db = sum(db,3);*/
-		dw = mat::zeros<vectorF4D>(mat::size(w));
+		//更新db
+		if (db.size() == 0)
+			db = mat::zeros(b.size());
+		if (para.pgrds >= 2) {
+			vectorF tempDb(sizeDh[0] * sizeDh[1], 0);
+			uint c = 0;
+			for (i = 0; i < sizeDh[0]; ++i)
+				for (j = 0; j < sizeDh[1]; ++j, ++c)
+					for (m = 0; m < sizeDh[2]; ++m)
+						for (n = 0; n < sizeDh[3]; ++n)
+							tempDb[c] += dh[i][j][m][n];
+			for (i = c = 0; i < b.size(); ++i) {
+				db[i] = 0.0f;
+				for (j = 0; j < (uint)para.bsze; ++j)
+					db[i] += tempDb[c++];
+			}
+		}
+		else {
+			vectorF tempDb(sizeDh[0] * sizeDh[1] * sizeDh[2] * sizeDh[3], 0);
+			uint c = 0;
+			for (i = 0; i < sizeDh[0]; ++i)
+				for (j = 0; j < sizeDh[1]; ++j)
+					for (m = 0; m < sizeDh[2]; ++m)
+						for (n = 0; n < sizeDh[3]; ++n)
+							tempDb[c++] += dh[i][j][m][n];
+			for (i = c = 0; i < b.size(); ++i) {
+				db[i] = 0.0f;
+				for (j = 0; j < (uint)para.bsze; ++j)
+					db[i] += tempDb[c++];
+			}
+		}
+		dw = mat::zeros(w); //[6 1 5 5]
 		dy_tilde = mat::flip(mat::flip(dy,1),2);
 		vectorF4D x_tilde = mat::flip(mat::flip(x,1),2);
-		for (_pt = 0; _pt < para.bsze; ++_pt)
-			for (_oc = 0; _oc < oc; ++_oc)
-				for (_ic = 0; _ic < ic; ++_ic) {
+		for (_pt = 0; _pt < para.bsze; ++_pt) //2
+			for (_oc = 0; _oc < oc; ++_oc) //6
+				for (_ic = 0; _ic < ic; ++_ic) { //1
 					addVector(dw[_pt][_oc]
 						,mat::conv2(x_tilde[_pt][_ic], dh[_pt][_oc], mat::VALID)
 						,mat::conv2(dy_tilde[_pt][_ic],h_pool[_pt][_oc], mat::VALID));
@@ -235,11 +262,11 @@ struct CAE {
 			b[i] -= opts.alpha * db[i];
 		for (i = 0; i < sizeC; ++i)
 			c[i] -= opts.alpha * dc[i];
-		std::vector<int> sizeW = mat::size<vectorF4D>(w);
+		std::vector<uint> sizeW = mat::size(w);
 		for (i = 0; i < sizeW[0]; ++i)
 			for (j = 0; j < sizeW[1]; ++j)
-				for (m = 0; j < sizeW[2]; ++m)
-					for (n = 0; j < sizeW[3]; ++n)
+				for (m = 0; m < sizeW[2]; ++m)
+					for (n = 0; n < sizeW[3]; ++n)
 						w[i][j][m][n] -= opts.alpha * dw[i][j][m][n];
 		w_tilde = mat::flip(mat::flip(w,1),2);
 	}
@@ -262,17 +289,17 @@ struct CAE {
 		return para;
 	}
 
-
-	static double randDouble() {
-		return rand() / (double)RAND_MAX;
+	//产生一个随机浮点数返回
+	static double randFloat() {
+		return rand() / (float)RAND_MAX;
 	}
-	static double randDouble(double a, double b) {
-		return (b - a)*randDouble() + a;
+	static double randFloat(double a, double b) {
+		return (b - a)*randFloat() + a;
 	}
 	//把out与vec1相加保存到out
 	static void addVector(vectorF2D& output, const vectorF2D& vec1) {
-		uint i, j, sizeOut[2] = { output.size() ,output[0].size() };
-		uint sizeVec[2] = { vec1.size() ,vec1[0].size() };
+		unsigned i, j, sizeOut[2] = { output.size() ,output[0].size() };
+		unsigned sizeVec[2] = { vec1.size() ,vec1[0].size() };
 		for (i = 0; i < sizeOut[0] && i < sizeVec[0]; ++i)
 			for (j = 0; j < sizeOut[1] && j < sizeVec[1]; ++j)
 				output[i][j] += vec1[i][j];

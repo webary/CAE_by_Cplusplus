@@ -57,7 +57,7 @@ vectorF4D flip(const vectorF4D  &vec, unsigned dim)
 
 //返回vec的第dim维的大小(从1开始,最多支持4维)
 template<typename T>
-inline int size(const T &vec, int dim)
+inline unsigned size(const T &vec, int dim)
 {
 	if (dim == 1)
 		return vec.size();
@@ -70,19 +70,13 @@ inline int size(const T &vec, int dim)
 	return 0;
 }
 
-//当没有传入维度时返回vec的所有维度信息
-template<typename T>
-inline std::vector<int> size(const T &vec)
+inline std::vector<unsigned> size(const vectorF4D &vec)
 {
-	std::vector<int> sizeMat(vec.size());
-	unsigned i = 0;
-	sizeMat[i++] = vec.size();
-	if (vec.size() > 1)
-		sizeMat[i++] = vec[0].size();
-	if (vec.size() > 2)
-		sizeMat[i++] = vec[0][0].size();
-	if (vec.size() > 3)
-		sizeMat[i++] = vec[0][0][0].size();
+	std::vector<unsigned> sizeMat(4);
+	sizeMat[0] = vec.size();
+	sizeMat[1] = vec[0].size();
+	sizeMat[2] = vec[0][0].size();
+	sizeMat[3] = vec[0][0][0].size();
 	return sizeMat;
 }
 
@@ -112,44 +106,29 @@ inline std::vector<T> linspace(const T &a, const T &b, unsigned n)
 	return randp;
 }
 
-inline vectorF zeros(int a)
+inline vectorF zeros(uint a)
 {
 	return vectorF(a, 0);
 }
 
-inline vectorF2D zeros(int a, int b)
+inline vectorF2D zeros(uint a, uint b)
 {
 	return vectorF2D(a, vectorF(b, 0));
 }
 
-inline vectorF3D zeros(int a, int b, int c)
+inline vectorF3D zeros(uint a, uint b, uint c)
 {
 	return vectorF3D(a, vectorF2D(b, vectorF(c, 0)));
 }
 
-inline vectorF4D zeros(int a, int b, int c, int d)
+inline vectorF4D zeros(uint a, uint b, uint c, uint d)
 {
 	return vectorF4D(a, vectorF3D(b, vectorF2D(c, vectorF(d, 0))));
 }
 
-//按照vec的规格产生一个零矩阵
-template<typename T>
-inline T zeros(const std::vector<int> &vec)
+inline vectorF4D zeros(const vectorF4D vec)
 {
-	switch (vec.size()) {
-	case 4:
-		return zeros(vec[0], vec[1], vec[2], vec[3]);
-		break;
-	case 3:
-		return zeros(vec[0], vec[1], vec[2]);
-		break;
-	case 2:
-		return zeros(vec[0], vec[1]);
-		break;
-	default:
-		return zeros(vec[0]);
-		break;
-	}
+	return vectorF4D(vec.size(), vectorF3D(vec[0].size(), vectorF2D(vec[0][0].size(), vectorF(vec[0][0][0].size(), 0))));
 }
 
 inline double sigm(double x)
@@ -236,13 +215,14 @@ inline vectorF max(const vectorF2D &vec)
 //求取一个4维数组中的最大值并保存到[1][1][*][*]数组中返回
 inline vectorF4D max4D(const vectorF4D &vec)
 {
-	const std::vector<int> v_size = mat::size(vec);
+	unsigned i, j, m, n;
+	const std::vector<unsigned> v_size = mat::size(vec);
 	vectorF4D maxMat = zeros(1,1,v_size[2],v_size[3]);
 	maxMat[0][0] = vec[0][0];
-	for (unsigned i = 0; i < v_size[0]; ++i)
-		for (unsigned j = 0; j < v_size[1]; ++j)
-			for (unsigned m = 0; m < v_size[2]; ++m)
-				for (unsigned n = 0; n < v_size[3]; ++n)
+	for ( i = 0; i < v_size[0]; ++i)
+		for (j = 0; j < v_size[1]; ++j)
+			for (m = 0; m < v_size[2]; ++m)
+				for (n = 0; n < v_size[3]; ++n)
 					if (maxMat[0][0][m][n] < vec[i][j][m][n])
 						maxMat[0][0][m][n] = vec[i][j][m][n];
 	return maxMat;
@@ -252,10 +232,11 @@ inline vectorF4D max4D(const vectorF4D &vec)
 //将一个4维矩阵重叠复制：[1 1 j k] => [m n j k]
 inline vectorF4D repmat4D(const vectorF4D &vec, int m, int n)
 {
-	const std::vector<int> v_size = mat::size(vec);
+	unsigned i, j;
+	const std::vector<unsigned> v_size = mat::size(vec);
 	vectorF4D repMat = zeros(m, n, v_size[2], v_size[3]);
-	for (unsigned i = 0; i < v_size[0]; ++i)
-		for (unsigned j = 0; j < v_size[1]; ++j)
+	for (i = 0; i < v_size[0]; ++i)
+		for (j = 0; j < v_size[1]; ++j)
 			repMat[i][j] = vec[0][0];
 	return repMat;
 }
@@ -269,19 +250,19 @@ inline bool equal(T a, T b)
 //把haveMax矩阵中不是maxMax(最大值)的元素置0,即只保留其中的最大值
 inline vectorF4D reserveMax(vectorF4D &haveMax, const vectorF4D &maxMat)
 {
-	vectorF4D mask(mat::zeros<vectorF4D>(mat::size(haveMax))); //最大值的位置用1表示
-	const std::vector<int> v_size = mat::size(haveMax);
-	for (unsigned i = 0; i < v_size[0]; ++i)
-		for (unsigned j = 0; j < v_size[1]; ++j)
-			for (unsigned m = 0; m < v_size[2]; ++m)
-				for (unsigned n = 0; n < v_size[3]; ++n)
+	unsigned i, j, m, n;
+	vectorF4D mask(mat::zeros(haveMax)); //最大值的位置用1表示
+	const std::vector<unsigned> v_size = mat::size(haveMax);
+	for (i = 0; i < v_size[0]; ++i)
+		for (j = 0; j < v_size[1]; ++j)
+			for (m = 0; m < v_size[2]; ++m)
+				for (n = 0; n < v_size[3]; ++n)
 					if (equal(haveMax[i][j][m][n], maxMat[0][0][m][n]))
 						mask[i][j][m][n] = 1;  //相等则置该位置的mask为1
 					else
 						haveMax[i][j][m][n] = 0; //不相等则把原始数据中该位置置0
 	return mask;
 }
-
 
 }
 #endif //_MATLABFUNCTION_H_
