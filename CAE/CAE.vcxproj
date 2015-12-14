@@ -147,10 +147,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="cae.h" />
-    <ClInclude Include="matlabFunction.h" />
+    <ClInclude Include="matlabFunc.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="cae.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="matlabFunc.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
