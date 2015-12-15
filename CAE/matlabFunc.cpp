@@ -1,6 +1,5 @@
 #include "matlabFunc.h"
 
-
 //实现matlab中常见操作
 namespace mat
 {
@@ -38,7 +37,7 @@ namespace mat
 		if (dim != 1 && dim != 2)
 			return vec;
 		vectorF4D myVec = vec;
-		int size[2] = { myVec.size(), myVec[0].size() }, i, j;
+		unsigned size[2] = { myVec.size(), myVec[0].size() }, i, j;
 		for (i = 0; i < size[0]; ++i)
 			for (j = 0; j < size[1]; ++j)
 				flip(myVec[i][j], dim);
@@ -58,6 +57,7 @@ namespace mat
 	void error(const char* str)
 	{
 		std::cout << str << std::endl;
+		std::cin.get();
 		exit(1);
 	}
 
@@ -85,9 +85,9 @@ namespace mat
 		return vectorF3D(a, vectorF2D(b, vectorF(c, 0)));
 	}
 
-	vectorF4D zeros(uint a, uint b, uint c, uint d)
+	vectorF4D zeros(uint a, uint b, uint c, uint d, float first/*=0*/)
 	{
-		return vectorF4D(a, vectorF3D(b, vectorF2D(c, vectorF(d, 0))));
+		return vectorF4D(a, vectorF3D(b, vectorF2D(c, vectorF(d, first))));
 	}
 
 	vectorF4D zeros(const vectorF4D vec)
@@ -140,15 +140,15 @@ namespace mat
 		return res;
 	}
 
-	//求一个数组的平均值
-	float mean(const vectorF &vec)
+	//求一个数组从from开始的len个数的平均值
+	float mean(const vectorF &vec, unsigned from, unsigned len)
 	{
-		if (vec.size() == 0)
+		if (vec.size() == 0 || len < 0)
 			return 0;
 		float meanValue = 0;
-		for (unsigned i = 0; i < vec.size(); ++i)
-			meanValue += vec[i];
-		return meanValue / vec.size();
+		for (unsigned i = 0; i < len; ++i)
+			meanValue += vec[from + i];
+		return meanValue / len;
 	}
 
 	//求取一个一维数组中的最大值并返回
@@ -177,19 +177,18 @@ namespace mat
 
 	}
 
-	//求取一个4维数组中的最大值并保存到[1][1][*][*]数组中返回
+	//求取一个4维数组中的最大值并保存到[*][*][1][1]数组中返回
 	vectorF4D max4D(const vectorF4D &vec)
 	{
 		unsigned i, j, m, n;
 		const std::vector<unsigned> v_size = mat::size(vec);
-		vectorF4D maxMat = zeros(1, 1, v_size[2], v_size[3]);
-		maxMat[0][0] = vec[0][0];
+		vectorF4D maxMat = zeros(v_size[0], v_size[1], 1, 1,FLT_MIN);
 		for (i = 0; i < v_size[0]; ++i)
 			for (j = 0; j < v_size[1]; ++j)
 				for (m = 0; m < v_size[2]; ++m)
 					for (n = 0; n < v_size[3]; ++n)
-						if (maxMat[0][0][m][n] < vec[i][j][m][n])
-							maxMat[0][0][m][n] = vec[i][j][m][n];
+						if (maxMat[i][j][0][0] < vec[i][j][m][n])
+							maxMat[i][j][0][0] = vec[i][j][m][n];
 		return maxMat;
 
 	}
@@ -216,7 +215,7 @@ namespace mat
 			for (j = 0; j < v_size[1]; ++j)
 				for (m = 0; m < v_size[2]; ++m)
 					for (n = 0; n < v_size[3]; ++n)
-						if (equal(haveMax[i][j][m][n], maxMat[0][0][m][n]))
+						if (equal(haveMax[i][j][m][n], maxMat[i][j][0][0]))
 							mask[i][j][m][n] = 1;  //相等则置该位置的mask为1
 						else
 							haveMax[i][j][m][n] = 0; //不相等则把原始数据中该位置置0

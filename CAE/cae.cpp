@@ -5,11 +5,12 @@ const bool TestOut = 0;
 CAE::CAE(int _ic, int _oc, int _ks, int _ps, double _noise)
 	: b(mat::zeros(_oc)), c(mat::zeros(_ic)),
 	w(_oc, vectorF3D(_ic, vectorF2D(_ks, vectorF(_ks)))) {
+	setSrand();
 	ic = _ic;
 	oc = _oc;
 	ks = _ks;
 	ps = _ps;
-	noise = _noise;
+	noise = (float)_noise;
 
 	int i, j, m, n;
 	for (i = 0; i < oc; ++i)
@@ -28,26 +29,26 @@ void CAE::train(const vectorF4D &x, const OPTS &opts) {
 	PARA para = check(x, opts);
 	L = mat::zeros(opts.numepochs * (int)para.bnum);
 	int t_start;
-	std::vector<int> idx;
+	vector<int> idx;
 	vectorF4D batch_x = mat::zeros(para.bsze, mat::size(x, 2)
 		, mat::size(x, 3), mat::size(x, 4));
 	for (int i = 0; i < opts.numepochs; ++i) {
-		std::cout << ">>> epoch " << i << "/" << opts.numepochs << std::endl;
+		cout << ">>> epoch " << i << "/" << opts.numepochs << " \t";
 		t_start = clock(); //开始计时
-		if (opts.shuffle)
+		if (opts.shuffle==1)
 			idx = mat::randperm(para.pnum);
 		else
 			idx = mat::linspace(1, para.pnum, para.pnum);
 		for (int j = 0; j < para.bnum; ++j) {
-			if (TestOut)std::cout << "j = " << j << "/" << para.bnum << std::endl;
+			if (TestOut)cout << "j = " << j << "/" << para.bnum << " \t";
 			for (int k = 0; k < para.bsze; ++k)
-				batch_x[k] = x[j * para.bsze + k];
+				batch_x[k] = x[idx[j * para.bsze + k]];
 			ffbp(batch_x, para);
 			update(opts);
 			L[i*(int)para.bnum + j] = loss;
 		}
 		//显示平均值
-		std::cout << mat::mean(L) << std::endl << clock() - t_start << " ms"<<std::endl;
+		cout << mat::mean(L,i*(int)para.bnum,(int)para.bnum) << "\t" << clock() - t_start << " ms"<<endl;
 		t_start = clock();
 	}
 }
@@ -56,7 +57,7 @@ void CAE::ffbp(const vectorF4D &x, PARA &para) {
 	if(TestOut)cout << "in ffbp\t" << clock() << endl;
 	vectorF4D x_noise = x;
 	uint i, j, m, n;
-	std::vector<uint> x_size = mat::size(x_noise);
+	vector<uint> x_size = mat::size(x_noise);
 	for (i = 0; i < x_size[0]; ++i)
 		for (j = 0; j < x_size[1]; ++j)
 			for (m = 0; m < x_size[2]; ++m)
@@ -86,7 +87,7 @@ void CAE::up(const vectorF4D &x, PARA &para) {
 void CAE::pool(const PARA &para) {
 	if (ps >= 2) {
 		h_pool = h_mask = mat::zeros(h); //[2 6 24 24]
-		ph = mat::zeros(para.bsze, oc, (uint)para.pgrds, (uint)para.pgrds);
+		ph = mat::zeros(para.bsze, oc, (uint)para.pgrds, (uint)para.pgrds); //[2 6 2 2]
 		vectorF4D grid = mat::zeros(para.bsze, oc, ps, ps); //[2 6 2 2]
 		vectorF4D sparse_grid, mask, tmpMax;
 		for (int i = 0; i < para.pgrds; ++i) {
@@ -97,10 +98,10 @@ void CAE::pool(const PARA &para) {
 							for (int ii = 0; ii < ps; ++ii)
 								grid[pt][_oc][jj][ii] = h[pt][_oc][j*ps + jj][i*ps + ii];
 				tmpMax = mat::max4D(grid);
-				ph[i][j] = tmpMax[0][0];
-				for (int jj = 0; jj < para.pgrds; ++jj)
-					for (int ii = 0; ii < para.pgrds; ++ii)
-						;
+				//ph[i][j] = tmpMax[0][0];
+				for (int ii = 0; ii < para.bsze; ++ii)
+					for (int jj = 0; jj < oc; ++jj)
+						ph[ii][jj][i][j] = tmpMax[ii][jj][0][0];
 				sparse_grid = grid;
 				mask = mat::reserveMax(sparse_grid, tmpMax);
 				for (int pt = 0; pt < para.bsze; ++pt)
@@ -133,7 +134,7 @@ void CAE::down(PARA &para) {
 
 void CAE::grad(const vectorF4D &x, PARA &para) {
 	unsigned i, j, m, n;
-	std::vector<unsigned> sizeOut = mat::size(out);
+	vector<unsigned> sizeOut = mat::size(out);
 	if (err.size() == 0 || dy.size() == 0)  //如果还没初始化err或dy，则让其大小等于out
 		dy = err = mat::zeros(out);
 	loss = 0;
@@ -163,7 +164,7 @@ void CAE::grad(const vectorF4D &x, PARA &para) {
 		for (_oc = 0; _oc < oc; ++_oc)
 			for (_ic = 0; _ic < ic; ++_ic)
 				addVector(dh[_pt][_oc], conv2(dy[_pt][_ic], w[_oc][_ic], mat::VALID));
-	std::vector<uint> sizeDh = mat::size(dh);
+	vector<uint> sizeDh = mat::size(dh);
 	if (ps >= 2) {
 		for (i = 0; i < sizeDh[0]; ++i)
 			for (j = 0; j < sizeDh[1]; ++j)
@@ -228,7 +229,7 @@ void CAE::update(const OPTS &opts) {
 		b[i] -= opts.alpha * db[i];
 	for (i = 0; i < sizeC; ++i)
 		c[i] -= opts.alpha * dc[i];
-	std::vector<uint> sizeW = mat::size(w);
+	vector<uint> sizeW = mat::size(w);
 	for (i = 0; i < sizeW[0]; ++i)
 		for (j = 0; j < sizeW[1]; ++j)
 			for (m = 0; m < sizeW[2]; ++m)
@@ -238,6 +239,8 @@ void CAE::update(const OPTS &opts) {
 }
 
 inline PARA CAE::check(const vectorF4D &x, const OPTS &opts) {
+	if (x.size() == 0)
+		mat::error("please init input data first!");
 	PARA para;
 	para.m = mat::size(x, 4);
 	para.pnum = mat::size(x, 1);

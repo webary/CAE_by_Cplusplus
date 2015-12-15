@@ -3,6 +3,7 @@
 #define _CAE_H_
 
 #include "matlabFunc.h"
+#include <fstream>
 
 //int batchsize;	bool shuffle;	double alpha;	int numepochs;
 struct OPTS {
@@ -32,9 +33,48 @@ struct PARA {
 struct InputSet {
 	//[1000  1  28  28]  注意matlab里是[28 28 1 1000]
 	vectorF4D data; //输入图数据
-	int tag;	//输入图标签
+	std::vector<int> dataTag;//输入图标签
 
-	InputSet(vectorF4D &_data, int _tag) : data(_data), tag(_tag) {}
+	InputSet() = default;
+	InputSet(vectorF4D &_data) : data(_data) {}
+	InputSet(const char* file, int size, int len = 0, bool haveTag = 1)
+	{
+		loadInput(file, size, len, haveTag);
+	}
+	
+	//数据文件，每组数据的规格，数据组数，是否包含标签
+	int loadInput(const char* file, unsigned size, unsigned len=0, bool haveTag=1)
+	{
+		std::ifstream loadFile(file);
+		if (loadFile.is_open()) {
+			if (len > 0) {
+				data.reserve(len);
+				if (haveTag)
+					dataTag.reserve(len);
+			}
+			uint i, j, k, tag;
+			bool success = true;	//如果某个数据读取错误，则失败
+			vectorF3D input = mat::zeros(1, size, size);
+			for (i = 0; len < 1 || i < len; ++i) {
+				for (j = 0; j < size && success; ++j)
+					for (k = 0; k < size; ++k)
+						if (!(loadFile >> input[0][j][k])) {
+							success = false;
+							break;
+						}
+				//该组数据没有读取完整，则不加入训练集
+				if (!success || haveTag && !(loadFile >> tag))
+					break;
+				data.push_back(input);
+				if (haveTag)
+					dataTag.push_back(tag);
+			}
+			loadFile.close();
+			return i;
+		}
+		else
+			return 0;
+	}
 };
 
 class CAE {
@@ -42,7 +82,7 @@ class CAE {
 	int oc; //ouput channels
 	int ks; //kernel size
 	int ps; //pool size
-	double noise, loss;
+	float noise, loss;
 	vectorF b, c, L, db, dc;
 	vectorF4D w, h, h_pool, h_mask, ph, out, err;
 	vectorF4D dw, w_tilde, dh, dy, dy_tilde;
@@ -73,11 +113,11 @@ protected:
 	PARA check(const vectorF4D &x, const OPTS &opts);
 
 	//产生一个随机浮点数返回
-	static double randFloat() {
+	static float randFloat() {
 		return rand() / (float)RAND_MAX;
 	}
-	static double randFloat(double a, double b) {
-		return (b - a)*randFloat() + a;
+	static float randFloat(double a, double b) {
+		return (float)((b - a)*randFloat() + a);
 	}
 	//把out与vec1相加保存到out
 	static void addVector(vectorF2D& output, const vectorF2D& vec1) {
@@ -91,6 +131,14 @@ protected:
 	static void addVector(vectorF2D &out, const vectorF2D &vec1, const Args...args) {
 		addVector(out, vec1);
 		addVector(out, args...);
+	}
+	//仅设置一次随机数种子
+	static void setSrand() {
+		static bool first = 1;
+		if (first) {
+			srand(unsigned(time(NULL)));
+			first = 0;
+		}
 	}
 };
 

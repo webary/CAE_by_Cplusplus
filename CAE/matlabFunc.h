@@ -62,7 +62,7 @@ vectorF2D zeros(uint a, uint b);
 
 vectorF3D zeros(uint a, uint b, uint c);
 
-vectorF4D zeros(uint a, uint b, uint c, uint d);
+vectorF4D zeros(uint a, uint b, uint c, uint d, float first=0);
 
 vectorF4D zeros(const vectorF4D vec);
 
@@ -77,7 +77,7 @@ enum Shape {
 vectorF2D conv2(const vectorF2D &A, const vectorF2D &B, Shape shape = FULL);
 
 //求一个数组的平均值
-float mean(const vectorF &vec);
+float mean(const vectorF &vec, unsigned from, unsigned len);
 
 //求取一个一维数组中的最大值并返回
 inline float max(const vectorF &vec);
