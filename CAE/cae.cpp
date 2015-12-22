@@ -1,6 +1,12 @@
 #include "cae.h"
 using namespace std;
-const bool TestOut = 0;
+
+//添加测试输出，当使用Debug模式时运行较慢，观察实际运行过程
+#ifdef _DEBUG
+#define TestOut 1
+#else
+#define TestOut 0
+#endif
 
 CAE::CAE(int _ic, int _oc, int _ks, int _ps, double _noise)
     : b(mat::zeros(_oc)), c(mat::zeros(_ic)),
@@ -35,6 +41,7 @@ void CAE::train(const vectorF4D &x, const OPTS &opts)
     vector<int> idx;
     vectorF4D batch_x = mat::zeros(para.bsze, mat::size(x, 2)
         , mat::size(x, 3), mat::size(x, 4));
+	cout << ">>" << endl;
     for (int i = 0; i < opts.numepochs; ++i) {
         cout << ">>> epoch " << i << "/" << opts.numepochs << " \t";
         t_start = clock(); //开始计时
@@ -50,7 +57,7 @@ void CAE::train(const vectorF4D &x, const OPTS &opts)
             update(opts);
             L[i*(int)para.bnum + j] = loss;
         }
-        //显示平均值
+        //显示平均误差
         cout << mat::mean(L, i*(int)para.bnum, (int)para.bnum) << "\t" << clock() - t_start << " ms" << endl;
         t_start = clock();
     }
@@ -188,29 +195,29 @@ void CAE::grad(const vectorF4D &x, PARA &para)
         db = mat::zeros(b.size());
     if (para.pgrds >= 2) {
         vectorF tempDb(sizeDh[0] * sizeDh[1], 0);
-        uint c = 0;
+        uint dim = 0; //tempDb的当前维度
         for (i = 0; i < sizeDh[0]; ++i)
-            for (j = 0; j < sizeDh[1]; ++j, ++c)
+            for (j = 0; j < sizeDh[1]; ++j, ++dim)
                 for (m = 0; m < sizeDh[2]; ++m)
                     for (n = 0; n < sizeDh[3]; ++n)
-                        tempDb[c] += dh[i][j][m][n];
-        for (i = c = 0; i < b.size(); ++i) {
+                        tempDb[dim] += dh[i][j][m][n];
+        for (i = dim = 0; i < b.size(); ++i) {
             db[i] = 0.0f;
             for (j = 0; j < (uint)para.bsze; ++j)
-                db[i] += tempDb[c++];
+                db[i] += tempDb[dim++];
         }
     } else {
         vectorF tempDb(sizeDh[0] * sizeDh[1] * sizeDh[2] * sizeDh[3], 0);
-        uint c = 0;
+        uint dim = 0; //tempDb的当前维度
         for (i = 0; i < sizeDh[0]; ++i)
             for (j = 0; j < sizeDh[1]; ++j)
                 for (m = 0; m < sizeDh[2]; ++m)
                     for (n = 0; n < sizeDh[3]; ++n)
-                        tempDb[c++] += dh[i][j][m][n];
-        for (i = c = 0; i < b.size(); ++i) {
+                        tempDb[dim++] += dh[i][j][m][n];
+        for (i = dim = 0; i < b.size(); ++i) {
             db[i] = 0.0f;
             for (j = 0; j < (uint)para.bsze; ++j)
-                db[i] += tempDb[c++];
+                db[i] += tempDb[dim++];
         }
     }
     if (TestOut)cout << "update [dw]\t" << clock() << endl;

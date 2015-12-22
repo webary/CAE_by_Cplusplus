@@ -8,7 +8,7 @@ int main()
     cae[1].setup(6, 16, 5, 2, 0);
     cae[2].setup(16, 120, 4, 1, 0);
 
-    OPTS opts(2, 1, 0.03, 5);
+    OPTS opts(2, 1, 0.03, 2);
     InputSet x("trainData.txt", 28, 300);
 
     cae[0].train(x.data, opts);

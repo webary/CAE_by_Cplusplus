@@ -2,8 +2,9 @@
 #ifndef _CAE_H_
 #define _CAE_H_
 
-#include "matlabFunc.h"
-#include <fstream>
+#include<ctime>
+#include<fstream>
+#include"matlabFunc.h"
 
 //int batchsize;	bool shuffle;	double alpha;	int numepochs;
 struct OPTS {
@@ -54,7 +55,7 @@ struct InputSet {
                     dataTag.reserve(len);
             }
             uint i, j, k, tag;
-            bool success = true;	//如果某个数据读取错误，则失败
+            bool success = true;  //如果某个数据读取错误，则失败
             vectorF3D input = mat::zeros(1, size, size);
             for (i = 0; len < 1 || i < len; ++i) {
                 for (j = 0; j < size && success; ++j)
@@ -94,7 +95,7 @@ public:
 
     void train(const vectorF4D &x, const OPTS &opts);
 
-    vectorF4D& getPh()
+    const vectorF4D& getPh() const
     {
         return ph;
     }
@@ -147,5 +148,9 @@ protected:
         }
     }
 };
+
+#ifndef _MSC_VER //兼容非项目环境编译（如在CB环境中）
+#include"cae.cpp"
+#endif
 
 #endif //_CAE_H_

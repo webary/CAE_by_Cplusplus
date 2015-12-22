@@ -2,7 +2,8 @@
 #ifndef _MATLABFUNCTION_H_
 #define _MATLABFUNCTION_H_
 
-#include<ctime>
+#include<cmath>  //exp, floor
+#include<cfloat> //FLT_MIN
 #include<vector>
 #include<iostream>
 #include<algorithm>
@@ -101,4 +102,9 @@ namespace mat
     vectorF4D reserveMax(vectorF4D &haveMax, const vectorF4D &maxMat);
 
 }
+
+#ifndef _MSC_VER //兼容非项目环境编译（如在CB环境中）
+#include"matlabFunc.cpp"
+#endif
+
 #endif //_MATLABFUNCTION_H_

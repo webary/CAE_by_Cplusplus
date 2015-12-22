@@ -55,7 +55,7 @@ namespace mat
 
     void error(const char* str)
     {
-        std::cout << str << std::endl;
+        std::cout << "error: " << str << std::endl;
         std::cin.get();
         exit(1);
     }
@@ -108,7 +108,7 @@ namespace mat
 
     vectorF2D conv2(const vectorF2D &A, const vectorF2D &B, Shape shape /*=FULL*/)
     {
-        unsigned sizeA[2]{ A.size() ,A[0].size() }, sizeB[2] = { B.size() ,B[0].size() };
+        unsigned sizeA[2] = {A.size(), A[0].size()}, sizeB[2] = {B.size() ,B[0].size()};
         vectorF2D result = zeros(sizeA[0] + sizeB[0] - 1, sizeA[1] + sizeB[1] - 1);
         unsigned i, j, m, n;
         for (i = 0; i < sizeA[0]; ++i)
