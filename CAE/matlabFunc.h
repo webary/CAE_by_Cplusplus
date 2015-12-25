@@ -40,22 +40,15 @@ namespace mat
         return 0;
     }
 
+    std::vector<unsigned> size(const vectorF3D &vec);
+
     std::vector<unsigned> size(const vectorF4D &vec);
 
     void error(const char* str);
 
-    std::vector<int> randperm(unsigned n);
+    std::vector<int> randperm(unsigned n, unsigned k=0);
 
-    template<typename T>
-    inline std::vector<T> linspace(const T &a, const T &b, unsigned n)
-    {
-        std::vector<T> randp(n);
-        T step = (b - a) / (n - 1);
-        for (unsigned i = 0; i < n; ++i)
-            randp[i] = a + i * step;
-        random_shuffle(randp.begin(), randp.end());
-        return randp;
-    }
+    std::vector<int> linspace(int a, int b, unsigned n);
 
     vectorF zeros(uint a);
 
@@ -65,7 +58,7 @@ namespace mat
 
     vectorF4D zeros(uint a, uint b, uint c, uint d, float first = 0);
 
-    vectorF4D zeros(const vectorF4D vec);
+    vectorF4D zerosLike(const vectorF4D &vec);
 
     inline double sigm(double x);
     //将一个Map图每个点加偏置后求sigmoid

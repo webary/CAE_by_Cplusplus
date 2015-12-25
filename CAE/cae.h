@@ -3,6 +3,7 @@
 #define _CAE_H_
 
 #include<ctime>
+#include<string>
 #include<fstream>
 #include"matlabFunc.h"
 
@@ -15,21 +16,22 @@ struct OPTS {
 
     OPTS() = default;
 
-    OPTS(int bs, bool sh, double al, int ne)
+    OPTS(int bs, bool sh, double al, int np)
     {
         batchsize = bs;
         shuffle = sh;
         alpha = (float)al;
-        numepochs = ne;
+        numepochs = np;
     }
 };
 
+//size(x,4) | number of data points | pool grids | batch size | number of batches
 struct PARA {
-    int m;      //size(x,4)
-    int pnum;   //number of data points
-    float pgrds;//pool grids
-    int bsze;   //batch size
-    float bnum; //number of batches
+    int m;     //size(x,4)
+    int pnum;  //number of data points
+    int pgrds; //pool grids
+    int bsze;  //batch size
+    int bnum;  //number of batches
 };
 
 struct InputSet {
@@ -85,20 +87,26 @@ class CAE {
     int ps; //pool size
     float noise, loss;
     vectorF b, c, L, db, dc;
-    vectorF4D w, h, h_pool, h_mask, ph, out, err;
+    vectorF4D w, h, h_pool, h_mask, out, err;
     vectorF4D dw, w_tilde, dh, dy, dy_tilde;
 public:
+	vectorF4D ph;
+
     CAE() = default;
     CAE(int _ic, int _oc, int _ks, int _ps, double _noise);
 
     void setup(int _ic, int _oc, int _ks, int _ps, double _noise);
 
-    void train(const vectorF4D &x, const OPTS &opts);
+    void train(const vectorF4D &x, const OPTS &opts, bool justTest=0);
 
     const vectorF4D& getPh() const
     {
         return ph;
     }
+
+    //randomly selected reconstruction results aside the original input.
+    void visualize(const vectorF4D &x, std::string file="cae_vis.txt");
+
 protected:
     void ffbp(const vectorF4D &x, PARA &para);
 
@@ -123,7 +131,7 @@ protected:
     {
         return (float)((b - a)*randFloat() + a);
     }
-    //把out与vec1相加保存到out
+    //把out与vec1相加保存到out(使用了可变模板函数参数,需c++11支持)
     static void addVector(vectorF2D& output, const vectorF2D& vec1)
     {
         unsigned i, j, sizeOut[2] = { output.size() ,output[0].size() };

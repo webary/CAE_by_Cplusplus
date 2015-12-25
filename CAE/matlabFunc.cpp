@@ -43,6 +43,15 @@ namespace mat
         return myVec;
     }
 
+    std::vector<unsigned> size(const vectorF3D &vec)
+    {
+        std::vector<unsigned> sizeMat(3);
+        sizeMat[0] = vec.size();
+        sizeMat[1] = vec[0].size();
+        sizeMat[2] = vec[0][0].size();
+        return sizeMat;
+    }
+
     std::vector<unsigned> size(const vectorF4D &vec)
     {
         std::vector<unsigned> sizeMat(4);
@@ -60,12 +69,25 @@ namespace mat
         exit(1);
     }
 
-    std::vector<int> randperm(unsigned n)
+    //返回[0...n-1]打乱之后的前k个数组成的序列
+    std::vector<int> randperm(unsigned n, unsigned k/*=0*/)
     {
         std::vector<int> randp(n);
         for (unsigned i = 0; i < n; ++i)
             randp[i] = i;
         std::random_shuffle(randp.begin(), randp.end()); //algorithm
+        if(k>0 && k<n)  //只取前k个
+            randp.resize(k);
+        return randp;
+    }
+
+    //返回区间为[a,b],个数为n的等差数列
+    std::vector<int> linspace(int a, int b, unsigned n)
+    {
+        std::vector<int> randp(n);
+        int step = (b - a) / (n - 1);
+        for (unsigned i = 0; i < n; ++i)
+            randp[i] = a + i * step;
         return randp;
     }
 
@@ -89,7 +111,7 @@ namespace mat
         return vectorF4D(a, vectorF3D(b, vectorF2D(c, vectorF(d, first))));
     }
 
-    vectorF4D zeros(const vectorF4D vec)
+    vectorF4D zerosLike(const vectorF4D &vec)
     {
         return vectorF4D(vec.size(), vectorF3D(vec[0].size(), vectorF2D(vec[0][0].size(), vectorF(vec[0][0][0].size(), 0))));
     }
@@ -207,7 +229,7 @@ namespace mat
     vectorF4D reserveMax(vectorF4D &haveMax, const vectorF4D &maxMat)
     {
         unsigned i, j, m, n;
-        vectorF4D mask(mat::zeros(haveMax)); //最大值的位置用1表示
+        vectorF4D mask(mat::zerosLike(haveMax)); //最大值的位置用1表示
         const std::vector<unsigned> v_size = mat::size(haveMax);
         for (i = 0; i < v_size[0]; ++i)
             for (j = 0; j < v_size[1]; ++j)
