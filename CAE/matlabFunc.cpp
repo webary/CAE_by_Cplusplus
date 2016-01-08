@@ -1,5 +1,6 @@
 #include "matlabFunc.h"
-
+#include <iostream>
+using namespace std;
 //实现matlab中常见操作
 namespace mat
 {
@@ -9,8 +10,8 @@ namespace mat
         unsigned size[2] = { vec.size(), vec[0].size() }, i, j;
         for (i = 0; i < size[0]; ++i) {
             for (j = 0; j < size[1]; ++j)
-                std::cout << vec[i][j] << " ";
-            std::cout << std::endl;
+                cout << vec[i][j] << " ";
+            cout << endl;
         }
     }
 
@@ -22,12 +23,12 @@ namespace mat
             half = size[0] / 2;
             for (i = 0; i < half; ++i)
                 for (j = 0; j < size[1]; ++j)
-                    std::swap(vec[i][j], vec[size[0] - i - 1][j]);
+                    swap(vec[i][j], vec[size[0] - i - 1][j]);
         } else if (dim == 2) {
             half = size[1] / 2;
             for (i = 0; i < size[0]; ++i)
                 for (j = 0; j < half; ++j)
-                    std::swap(vec[i][j], vec[i][size[1] - j - 1]);
+                    swap(vec[i][j], vec[i][size[1] - j - 1]);
         }
     }
     //返回四维数组vec按照dim维翻转后的数组
@@ -43,18 +44,18 @@ namespace mat
         return myVec;
     }
 
-    std::vector<unsigned> size(const vectorF3D &vec)
+    vector<unsigned> size(const vectorF3D &vec)
     {
-        std::vector<unsigned> sizeMat(3);
+        vector<unsigned> sizeMat(3);
         sizeMat[0] = vec.size();
         sizeMat[1] = vec[0].size();
         sizeMat[2] = vec[0][0].size();
         return sizeMat;
     }
 
-    std::vector<unsigned> size(const vectorF4D &vec)
+    vector<unsigned> size(const vectorF4D &vec)
     {
-        std::vector<unsigned> sizeMat(4);
+        vector<unsigned> sizeMat(4);
         sizeMat[0] = vec.size();
         sizeMat[1] = vec[0].size();
         sizeMat[2] = vec[0][0].size();
@@ -64,27 +65,36 @@ namespace mat
 
     void error(const char* str)
     {
-        std::cout << "error: " << str << std::endl;
-        std::cin.get();
+        cout << "error: " << str << endl;
+        cin.get();
         exit(1);
     }
 
-    //返回[0...n-1]打乱之后的前k个数组成的序列
-    std::vector<int> randperm(unsigned n, unsigned k/*=0*/)
+    //returns an 1*n matrix containing pseudorandom integer values drawn from the discrete uniform distribution on the interval [0,imax)
+    vector<int> randi(unsigned imax, unsigned n)
     {
-        std::vector<int> randp(n);
+        vector<int> randiMat(n);
+        for (unsigned i = 0; i < n; ++i)
+            randiMat[i] = rand() % imax;
+        return randiMat;
+    }
+
+    //返回[0...n-1]打乱之后的前k个数组成的序列
+    vector<int> randperm(unsigned n, unsigned k/*=0*/)
+    {
+        vector<int> randp(n);
         for (unsigned i = 0; i < n; ++i)
             randp[i] = i;
-        std::random_shuffle(randp.begin(), randp.end()); //algorithm
-        if(k>0 && k<n)  //只取前k个
+        random_shuffle(randp.begin(), randp.end()); //algorithm
+        if (k > 0 && k < n)  //只取前k个
             randp.resize(k);
         return randp;
     }
 
     //返回区间为[a,b],个数为n的等差数列
-    std::vector<int> linspace(int a, int b, unsigned n)
+    vector<int> linspace(int a, int b, unsigned n)
     {
-        std::vector<int> randp(n);
+        vector<int> randp(n);
         int step = (b - a) / (n - 1);
         for (unsigned i = 0; i < n; ++i)
             randp[i] = a + i * step;
@@ -123,14 +133,14 @@ namespace mat
     //将一个Map图每个点加偏置后求sigmoid
     void sigm(vectorF2D &vec, float bias)
     {
-        for (uint i = 0; i<vec.size(); ++i)
-            for (uint j = 0; j<vec[i].size(); ++j)
+        for (uint i = 0; i < vec.size(); ++i)
+            for (uint j = 0; j < vec[i].size(); ++j)
                 vec[i][j] = (float)sigm(vec[i][j] + bias);
     }
 
     vectorF2D conv2(const vectorF2D &A, const vectorF2D &B, Shape shape /*=FULL*/)
     {
-        unsigned sizeA[2] = {A.size(), A[0].size()}, sizeB[2] = {B.size() ,B[0].size()};
+        unsigned sizeA[2] = { A.size(), A[0].size() }, sizeB[2] = { B.size() ,B[0].size() };
         vectorF2D result = zeros(sizeA[0] + sizeB[0] - 1, sizeA[1] + sizeB[1] - 1);
         unsigned i, j, m, n;
         for (i = 0; i < sizeA[0]; ++i)
@@ -163,7 +173,7 @@ namespace mat
     //求一个数组从from开始的len个数的平均值
     float mean(const vectorF &vec, unsigned from, unsigned len)
     {
-        if (vec.size() == 0 || len < 0)
+        if (vec.size() == 0 || len < 0 || len + from > vec.size())
             return 0;
         float meanValue = 0;
         for (unsigned i = 0; i < len; ++i)
@@ -201,7 +211,7 @@ namespace mat
     vectorF4D max4D(const vectorF4D &vec)
     {
         unsigned i, j, m, n;
-        const std::vector<unsigned> v_size = mat::size(vec);
+        const vector<unsigned> v_size = mat::size(vec);
         vectorF4D maxMat = zeros(v_size[0], v_size[1], 1, 1, FLT_MIN);
         for (i = 0; i < v_size[0]; ++i)
             for (j = 0; j < v_size[1]; ++j)
@@ -217,7 +227,7 @@ namespace mat
     inline vectorF4D repmat4D(const vectorF4D &vec, int m, int n)
     {
         unsigned i, j;
-        const std::vector<unsigned> v_size = mat::size(vec);
+        const vector<unsigned> v_size = mat::size(vec);
         vectorF4D repMat = zeros(m, n, v_size[2], v_size[3]);
         for (i = 0; i < v_size[0]; ++i)
             for (j = 0; j < v_size[1]; ++j)
@@ -230,7 +240,7 @@ namespace mat
     {
         unsigned i, j, m, n;
         vectorF4D mask(mat::zerosLike(haveMax)); //最大值的位置用1表示
-        const std::vector<unsigned> v_size = mat::size(haveMax);
+        const vector<unsigned> v_size = mat::size(haveMax);
         for (i = 0; i < v_size[0]; ++i)
             for (j = 0; j < v_size[1]; ++j)
                 for (m = 0; m < v_size[2]; ++m)

@@ -23,13 +23,13 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="cae.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="matlabFunc.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CAE_main.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

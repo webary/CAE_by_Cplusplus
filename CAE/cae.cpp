@@ -1,17 +1,18 @@
 #include "cae.h"
 #include <iomanip>
+#include <iostream>
 using namespace std;
 
 //添加测试输出，当使用Debug模式时运行较慢，观察实际运行过程
 #ifdef _DEBUG
-#define TestOut 1
+#   define TestOut 1
 #else
-#define TestOut 0
+#   define TestOut 0
 #endif
 
 CAE::CAE(int _ic, int _oc, int _ks, int _ps, double _noise)
     : b(mat::zeros(_oc)), c(mat::zeros(_ic)),
-      w(_oc, vectorF3D(_ic, vectorF2D(_ks, vectorF(_ks))))
+    w(_oc, vectorF3D(_ic, vectorF2D(_ks, vectorF(_ks))))
 {
     setSrand();
     ic = _ic;
@@ -34,35 +35,36 @@ void CAE::setup(int _ic, int _oc, int _ks, int _ps, double _noise)
     *this = CAE(_ic, _oc, _ks, _ps, _noise);
 }
 
-void CAE::train(const vectorF4D &x, const OPTS &opts, bool justTest)
+void CAE::train(const vectorF4D &x, const OPTS &opts, TarinTestType tt_type)
 {
     PARA para = check(x, opts);
-    L = mat::zeros(opts.numepochs * (int)para.bnum);
-    int t_start;
+    L = mat::zeros(opts.numepochs * para.bnum);
     vector<int> idx;
     vectorF4D batch_x = mat::zeros(para.bsze, mat::size(x, 2)
-                                   , mat::size(x, 3), mat::size(x, 4));
+        , mat::size(x, 3), mat::size(x, 4));
     cout << ">>" << endl;
     for (int i = 0; i < opts.numepochs; ++i) {
-        if(!justTest)
-			cout << ">>> epoch " << i+1 << "/" << opts.numepochs << "  \t";
-		else
-			cout << ">>> 测试结果: \t";
-        t_start = clock(); //开始计时
+        if (tt_type == TT_Train)
+            cout << ">>> epoch " << i + 1 << "/" << opts.numepochs << "  \t";
+        else if (tt_type == TT_Test)
+            cout << ">>> 测试结果: \t";
+        int t_start = clock(); //开始计时
         if (opts.shuffle == 1)
             idx = mat::randperm(para.pnum);
         else
-            idx = mat::linspace(0, para.pnum-1, para.pnum);
+            idx = mat::linspace(0, para.pnum - 1, para.pnum);
         for (int j = 0; j < para.bnum; ++j) {
-            if (TestOut)cout << "j = " << j+1 << "/" << para.bnum << " \t";
+            if (TestOut)cout << "j = " << j + 1 << "/" << para.bnum << " \t";
             for (int k = 0; k < para.bsze; ++k)
                 batch_x[k] = x[idx[j * para.bsze + k]];
             ffbp(batch_x, para);
             update(opts);
-            L[i*(int)para.bnum + j] = loss;
+            L[i*para.bnum + j] = loss;
         }
         //显示平均误差
-        cout << mat::mean(L, i*(int)para.bnum, (int)para.bnum) << " \t" << clock() - t_start << " ms" << endl;
+        if (tt_type != TT_None)
+            cout << mat::mean(L, i*para.bnum, para.bnum) << " \t"
+            << clock() - t_start << " ms" << endl;
     }
 }
 
@@ -88,7 +90,7 @@ void CAE::ffbp(const vectorF4D &x, PARA &para)
     grad(x, para);
 }
 
-void CAE::up(const vectorF4D &x, PARA &para)
+void CAE::up(const vectorF4D &x, const PARA &para)
 {
     h = mat::zeros(para.bsze, oc, para.m - ks + 1, para.m - ks + 1);
     for (int pt = 0; pt < para.bsze; ++pt)
@@ -106,17 +108,17 @@ void CAE::pool(const PARA &para)
         ph = mat::zeros(para.bsze, oc, (uint)para.pgrds, (uint)para.pgrds); //[2 6 12 12]
         vectorF4D grid = mat::zeros(para.bsze, oc, ps, ps); //[2 6 2 2]
         vectorF4D sparse_grid, mask, tmpMax;
-        for (int i = 0; i < para.pgrds; ++i) {
-            for (int j = 0; j < para.pgrds; ++j) {
+        for (int j = 0; j < para.pgrds; ++j) {
+            for (int i = 0; i < para.pgrds; ++i) {
                 for (int pt = 0; pt < para.bsze; ++pt)
                     for (int _oc = 0; _oc < oc; ++_oc)
                         for (int jj = 0; jj < ps; ++jj)
                             for (int ii = 0; ii < ps; ++ii)
                                 grid[pt][_oc][jj][ii] = h[pt][_oc][j*ps + jj][i*ps + ii];
                 tmpMax = mat::max4D(grid);
-                for (int ii = 0; ii < para.bsze; ++ii)
-                    for (int jj = 0; jj < oc; ++jj)
-                        ph[ii][jj][i][j] = tmpMax[ii][jj][0][0];
+                for (int jj = 0; jj < para.bsze; ++jj)
+                    for (int ii = 0; ii < oc; ++ii)
+                        ph[jj][ii][j][i] = tmpMax[jj][ii][0][0];
                 sparse_grid = grid;
                 mask = mat::reserveMax(sparse_grid, tmpMax);
                 for (int pt = 0; pt < para.bsze; ++pt)
@@ -150,6 +152,7 @@ void CAE::grad(const vectorF4D &x, PARA &para)
 {
     unsigned i, j, m, n;
     vector<unsigned> sizeOut = mat::size(out);
+    //更新dy, db, loss
     dy = err = mat::zerosLike(out);
     loss = 0;
     vectorF tempDc(sizeOut[0] * sizeOut[1], 0);
@@ -231,8 +234,8 @@ void CAE::grad(const vectorF4D &x, PARA &para)
         for (_oc = 0; _oc < oc; ++_oc) //6
             for (_ic = 0; _ic < ic; ++_ic) { //1
                 addVector(dw[_oc][_ic]
-                          , mat::conv2(x_tilde[_pt][_ic], dh[_pt][_oc], mat::VALID)
-                          , mat::conv2(dy_tilde[_pt][_ic], h_pool[_pt][_oc], mat::VALID));
+                    , mat::conv2(x_tilde[_pt][_ic], dh[_pt][_oc], mat::VALID)
+                    , mat::conv2(dy_tilde[_pt][_ic], h_pool[_pt][_oc], mat::VALID));
             }
 }
 
@@ -281,47 +284,56 @@ PARA CAE::check(const vectorF4D &x, const OPTS &opts)
 void CAE::visualize(const vectorF4D &x, string file)
 {
     const int n = 10, n_2 = n*n;
-    unsigned i,j,k,p,q;
+    unsigned i, j, k, p, q;
     vector<unsigned> sizeX = mat::size(x);
     sizeX[0] = n_2;
     vectorF4D randX = mat::zeros(sizeX[0], sizeX[1], sizeX[2], sizeX[3]);
-    vector<int> randIndex = mat::randperm(mat::size(x,1),n_2); //随机选取100个样本
-    for(i=0; i<n_2; ++i)
+    vector<int> randIndex = mat::randi(mat::size(x, 1), n_2); //随机选取100个样本
+    for (i = 0; i < n_2; ++i)
         randX[i] = x[randIndex[i]];
-    OPTS opts(n_2,0,0,1);
+    OPTS opts(n_2, 0, 0, 1);
     CAE tmp(*this);
-    tmp.train(randX, opts, 1);
-	vectorF4D z4 = mat::zeros(1,sizeX[1],n*sizeX[2]+2,n*sizeX[3]+2,1);
+    tmp.train(randX, opts, TT_Test);
+    vectorF4D z4 = mat::zeros(1, sizeX[1], n*sizeX[2] + 2, n*sizeX[3] + 2, 1);
     vectorF3D input = z4[0], recon = z4[0];
 
-    for(i=0; i<n; ++i) //行
-        for(j=0; j<n; ++j)  //列
-            for(k=0; k<sizeX[1]; ++k)  //图的个数
-                for(p=0; p<sizeX[2]; ++p)  //像素点的行
-                    for(q=0; q<sizeX[3]; ++q) { //像素点的列
-                        input[k][i*sizeX[2]+1+p][j*sizeX[3]+1+q] = randX[i*n+j][k][p][q];
-                        recon[k][i*sizeX[2]+1+p][j*sizeX[3]+1+q] = tmp.out[i*n+j][k][p][q];
+    for (i = 0; i < n; ++i) //行
+        for (j = 0; j < n; ++j)  //列
+            for (k = 0; k < sizeX[1]; ++k)  //图的个数
+                for (p = 0; p < sizeX[2]; ++p)  //像素点的行
+                    for (q = 0; q < sizeX[3]; ++q) { //像素点的列
+                        input[k][i*sizeX[2] + 1 + p][j*sizeX[3] + 1 + q] = randX[i*n + j][k][p][q];
+                        recon[k][i*sizeX[2] + 1 + p][j*sizeX[3] + 1 + q] = tmp.out[i*n + j][k][p][q];
                     }
     //保存input，recon数据到文件,然后转化为图片展示
-    fstream saveTo(file,ios::out);
-    if(!(saveTo.is_open()))
-        return ;
+    fstream saveTo(file, ios::out);
+    if (!(saveTo.is_open()))
+        return;
     vector<unsigned> sizeInput = mat::size(input);
-    //输出min[sizeInput[0],6]副sizeInput[1] * (2*sizeInput[2]+1)大小的图像数据
+    saveTo << sizeInput[0] << " " << sizeInput[1] << " " << 2 * sizeInput[2] + 1 << endl;
+    //输出sizeInput[0]副sizeInput[1] * (2*sizeInput[2]+1)大小的图像数据
     saveTo << setiosflags(ios::left) << setprecision(4);
-    for(i=0; i<sizeInput[0] && i<6; ++i){
-        for(j=0; j<sizeInput[1]; ++j){
+    for (i = 0; i < sizeInput[0]; ++i) {
+        for (j = 0; j < sizeInput[1]; ++j) {
             for (k = 0; k < sizeInput[2]; ++k)
-                saveTo << setw(7) << input[i][j][k] << " ";
-            saveTo << setw(7) << 0.5 << " ";
+                saveTo << setw(8) << setiosflags(ios::left) << input[i][j][k] << " ";
+            saveTo << setw(8) << 0.5 << " ";
             for (k = 0; k < sizeInput[2]; ++k)
-                saveTo << setw(7) << setiosflags(ios::left) << recon[i][j][k] << " ";
+                saveTo << setw(8) << setiosflags(ios::left) << recon[i][j][k] << " ";
             saveTo << endl;
         }
-        saveTo<<endl;
+        saveTo << endl;
     }
-    saveTo << "[" << sizeInput[0] << "," << sizeInput[1] << "," << 2*sizeInput[2]+1 << "]" << endl;
     saveTo.close();
-    system("RE2JPG.exe 0");
-    system("cae_vis\\1.jpg");
+    system("RE2JPG.exe 0");  //将像素数据保存到图片
+    system("cae_vis\\1.jpg");//显示图片
+}
+
+//取得数据集x通过CAE后的输出
+vectorF4D CAE::getCAEOut(const vectorF4D & x)
+{
+    OPTS opts(x.size(), 0, 0, 1);
+    CAE tmp(*this);
+    tmp.train(x, opts, TT_None);
+    return tmp.ph; //[x.size() , oc , (size-ks)/ps , (size-ks)/ps]
 }

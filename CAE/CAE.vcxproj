@@ -87,7 +87,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="cae.cpp" />
-    <ClCompile Include="main.cpp" />
+    <ClCompile Include="CAE_main.cpp" />
     <ClCompile Include="matlabFunc.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

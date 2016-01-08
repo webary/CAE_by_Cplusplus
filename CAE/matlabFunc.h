@@ -5,7 +5,6 @@
 #include<cmath>  //exp, floor
 #include<cfloat> //FLT_MIN
 #include<vector>
-#include<iostream>
 #include<algorithm>
 
 typedef unsigned uint;
@@ -46,7 +45,9 @@ namespace mat
 
     void error(const char* str);
 
-    std::vector<int> randperm(unsigned n, unsigned k=0);
+    std::vector<int> randperm(unsigned n, unsigned k = 0);
+
+    std::vector<int> randi(unsigned imax, unsigned n);
 
     std::vector<int> linspace(int a, int b, unsigned n);
 
@@ -70,7 +71,7 @@ namespace mat
     };
     vectorF2D conv2(const vectorF2D &A, const vectorF2D &B, Shape shape = FULL);
 
-    //求一个数组的平均值
+    //求一个数组从from开始的len个数的平均值
     float mean(const vectorF &vec, unsigned from, unsigned len);
 
     //求取一个一维数组中的最大值并返回
@@ -88,7 +89,7 @@ namespace mat
     template<typename T>
     inline bool equal(T a, T b)
     {
-        return a - b<1e-5 && b - a<1e-5;
+        return a - b < 1e-5 && b - a < 1e-5;
     }
 
     //把haveMax矩阵中不是maxMax(最大值)的元素置0,即只保留其中的最大值

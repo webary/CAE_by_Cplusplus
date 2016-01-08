@@ -33,10 +33,12 @@ struct PARA {
     int bsze;  //batch size
     int bnum;  //number of batches
 };
-
+/*
+vectorF4D data; //输入图数据.[n  1  28  28]
+std::vector<int> dataTag;//输入图标签
+*/
 struct InputSet {
-    //[1000  1  28  28]  注意matlab里是[28 28 1 1000]
-    vectorF4D data; //输入图数据
+    vectorF4D data; //输入图数据.[n  1  28  28]  注意matlab里是[28 28 1 n]
     std::vector<int> dataTag;//输入图标签
 
     InputSet() = default;
@@ -87,17 +89,22 @@ class CAE {
     int ps; //pool size
     float noise, loss;
     vectorF b, c, L, db, dc;
-    vectorF4D w, h, h_pool, h_mask, out, err;
+    vectorF4D w, h, h_pool, h_mask, out, err;//out是反演之后的结果
     vectorF4D dw, w_tilde, dh, dy, dy_tilde;
 public:
-	vectorF4D ph;
+    vectorF4D ph; //卷积操作加下采样之后的结果.一维大小为opts.batchsize
 
     CAE() = default;
     CAE(int _ic, int _oc, int _ks, int _ps, double _noise);
 
     void setup(int _ic, int _oc, int _ks, int _ps, double _noise);
 
-    void train(const vectorF4D &x, const OPTS &opts, bool justTest=0);
+    enum TarinTestType {
+        TT_Train,
+        TT_Test,
+        TT_None
+    };
+    void train(const vectorF4D &x, const OPTS &opts, TarinTestType tt_type = TT_Train);
 
     const vectorF4D& getPh() const
     {
@@ -105,12 +112,14 @@ public:
     }
 
     //randomly selected reconstruction results aside the original input.
-    void visualize(const vectorF4D &x, std::string file="cae_vis.txt");
+    void visualize(const vectorF4D &x, std::string file = "cae_vis.txt");
 
+    //取得数据集x通过CAE后的输出
+    vectorF4D getCAEOut(const vectorF4D &x);
 protected:
     void ffbp(const vectorF4D &x, PARA &para);
-
-    void up(const vectorF4D &x, PARA &para);
+    //重新计算h
+    void up(const vectorF4D &x, const PARA &para);
 
     void pool(const PARA &para);
 
